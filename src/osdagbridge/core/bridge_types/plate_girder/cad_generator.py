@@ -47,6 +47,10 @@ from osdagbridge.core.bridge_components.super_structure.median.builder import (
 from osdagbridge.core.bridge_components.super_structure.cross_bracing.builder import (
     build_cross_bracings
 )
+from osdagbridge.core.bridge_components.sub_structure.assembly import (
+    build_substructure
+)
+
 
 from osdagbridge.core.bridge_types.plate_girder.dto import (
     BridgeParametersDTO,
@@ -908,6 +912,56 @@ class PlateGirderCADGenerator:
         
         supports = supports_tri + supports_cyl
 
+        # BUILD SUBSTRUCTURE AT SUPPORT LOCATIONS (X=0 and X=span_length_L)
+        substructure_shapes = {
+            "pile": {"piles": []},
+            "pile_cap": {"pile_cap": []},
+            "pier": {"pier": []},
+            "pier_cap": {"pier_cap": []},
+            "pile_rebar": {"main_bars": [], "ties": []},
+            "pile_cap_rebar": {"bars_x": [], "bars_y": []},
+            "pier_rebar": {"main_bars": [], "ties": []},
+            "pier_cap_rebar": {"bars_x": [], "bars_y": []},
+        }
+
+        sub_height = 600 + 3000 + 600  # pile_cap_depth + pier_height + pier_cap_depth
+        girder_bottom_z = -(self.girder_section_d / 2.0) - self.girder_section_tf_b
+        base_z = girder_bottom_z - sub_height
+
+        total_width = (self.num_girders - 1) * self.girder_spacing
+        p_cap_length = max(1000, total_width + self.girder_section_bf) if total_width > 0 else 1000
+
+        for x_loc in [0.0, self.span_length_L]:
+            sub = build_substructure(
+                pier_diameter=800,
+                pier_height=3000,
+                pier_cap_top_width=3000,
+                pier_cap_bottom_width=1200,
+                pier_cap_depth=600,
+                pier_cap_length=p_cap_length,
+                pile_cap_length=2200,
+                pile_cap_width=1200,
+                pile_cap_depth=600,
+                pile_diameter=400,
+                pile_length=5000,
+                n_piles_per_cap=4,
+                pile_spacing=600,
+                base_origin=(x_loc, 0.0, base_z),
+                cover=40
+            )
+            substructure_shapes["pile"]["piles"].extend(sub["pile"]["piles"])
+            substructure_shapes["pile_cap"]["pile_cap"].append(sub["pile_cap"]["pile_cap"])
+            substructure_shapes["pier"]["pier"].append(sub["pier"]["pier"])
+            substructure_shapes["pier_cap"]["pier_cap"].append(sub["pier_cap"]["pier_cap"])
+            substructure_shapes["pile_rebar"]["main_bars"].extend(sub["pile_rebar"]["main_bars"])
+            substructure_shapes["pile_rebar"]["ties"].extend(sub["pile_rebar"]["ties"])
+            substructure_shapes["pile_cap_rebar"]["bars_x"].extend(sub["pile_cap_rebar"]["bars_x"])
+            substructure_shapes["pile_cap_rebar"]["bars_y"].extend(sub["pile_cap_rebar"]["bars_y"])
+            substructure_shapes["pier_rebar"]["main_bars"].extend(sub["pier_rebar"]["main_bars"])
+            substructure_shapes["pier_rebar"]["ties"].extend(sub["pier_rebar"]["ties"])
+            substructure_shapes["pier_cap_rebar"]["bars_x"].extend(sub["pier_cap_rebar"]["bars_x"])
+            substructure_shapes["pier_cap_rebar"]["bars_y"].extend(sub["pier_cap_rebar"]["bars_y"])
+
         # RETURN ALL GENERATED COMPONENTS
         
         return {
@@ -956,8 +1010,12 @@ class PlateGirderCADGenerator:
             "median_w_beams": median_w_beams,
             
             # Railings
-            "railings": railings
+            "railings": railings,
+
+            # Substructure assembly
+            "substructure": substructure_shapes,
         }
+
 
     def create3Dcad(self):
         """

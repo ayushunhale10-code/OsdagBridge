@@ -467,6 +467,62 @@ class CAD3DWindow(QWidget):
             BARRIER_COLOR
         )
 
+        # SUBSTRUCTURE COMPONENTS & REBAR
+        sub = cad_data.get("substructure", {})
+        if sub:
+            CONCRETE_GRAY = Quantity_Color(100 / 255.0, 100 / 255.0, 100 / 255.0, Quantity_TOC_RGB)
+            REBAR_COLOR = Quantity_Color(180 / 255.0, 180 / 255.0, 190 / 255.0, Quantity_TOC_RGB)
+
+            display_and_register(
+                sub.get("pier", {}).get("pier", []),
+                "Pier",
+                "Pier Column",
+                CONCRETE_GRAY,
+                transparency=0.35
+            )
+
+            display_and_register(
+                sub.get("pier_cap", {}).get("pier_cap", []),
+                "Pier Cap",
+                "Pier Cap",
+                CONCRETE_GRAY,
+                transparency=0.35
+            )
+
+            display_and_register(
+                sub.get("pile_cap", {}).get("pile_cap", []),
+                "Pile Cap",
+                "Pile Cap",
+                CONCRETE_GRAY,
+                transparency=0.35
+            )
+
+            display_and_register(
+                sub.get("pile", {}).get("piles", []),
+                "Piles",
+                "Foundation Piles",
+                CONCRETE_GRAY,
+                transparency=0.35
+            )
+
+            all_rebars = []
+            for sub_key in ["pile_rebar", "pile_cap_rebar", "pier_rebar", "pier_cap_rebar"]:
+                rb_dict = sub.get(sub_key, {})
+                for list_key, shp_list in rb_dict.items():
+                    if isinstance(shp_list, list):
+                        all_rebars.extend(shp_list)
+                    elif shp_list:
+                        all_rebars.append(shp_list)
+
+            display_and_register(
+                all_rebars,
+                "Substructure Rebar",
+                "Substructure Reinforcement Rebar",
+                REBAR_COLOR,
+                transparency=0.0
+            )
+
+
         # Nodes and grillage overlays
         node_positions = self._render_nodes()
         self._render_grillage(node_positions)
@@ -716,9 +772,11 @@ class CAD3DWindow(QWidget):
             "Crash Barrier": ["Crash Barrier", "Crash Barrier W-Beam"],
             "Median":        ["Median", "Median W-Beam"],
             "Railing":       ["Railing"],
+            "Substructure":  ["Pier", "Pier Cap", "Pile Cap", "Piles", "Substructure Rebar"],
             "Grillage":      ["Grillage"],
             "Node":          ["Node"],
         }
+
 
         # Build the set of AIS keys that should be visible
         visible_keys: set = set()
@@ -1209,10 +1267,12 @@ class BridgeComponentCheckbox(QWidget):
         ("Crash Barrier", "Crash Barrier"),
         ("Median",        "Median"),
         ("Railing",       "Railing"),
+        ("Substructure",  "Substructure"),
         ("Grillage view", "Grillage"),
         ("Node",          "Node"),
         ("Node Numbers",  "NodeNumbers"),
     ]
+
     OVERLAY_KEYS = {"Grillage", "Node", "NodeNumbers"}
     # Base components that are only present in some designs. Their checkboxes
     # are hidden when the component is not part of the current design.

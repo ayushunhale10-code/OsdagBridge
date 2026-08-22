@@ -590,12 +590,164 @@ class BridgeIfcGenerator:
                  place = self.mapper.create_axis2placement_3d(scaled_origin, z_dir=[1,0,0], x_dir=[0,1,0])
                  local_identity = self.mapper.create_axis2placement_3d((0,0,0), z_dir=(0,0,1), x_dir=(1,0,0))
                  solid = self.mapper.create_extruded_solid(prof, item.span * s, local_identity)
+                 
                  shape = self.file.createIfcShapeRepresentation(self.mapper._context3d, "Body", "SweptSolid", [solid])
                  self.mapper.apply_color(shape, RCC_COLOR)
                  prod_def = self.file.createIfcProductDefinitionShape(None, None, [shape])
                  elem = self.file.createIfcRailing(create_ifc_guid(), self._owner_history, Name=item.ifc_name, ObjectPlacement=self.file.createIfcLocalPlacement(self.storey.ObjectPlacement, place), Representation=prod_def)
                  self.bind_element_to_storey(elem)
                  self.metadata.map_barrier(elem, cad_context, item.ifc_name)
+
+        def _process_pile(item):
+            radius = (item.diameter / 2.0) * s
+            prof = self.file.createIfcCircleProfileDef("AREA", None, self.mapper.create_axis2placement_2d(), float(radius))
+            scaled_origin = [v * s for v in item.origin]
+            place = self.mapper.create_axis2placement_3d(scaled_origin, z_dir=(0, 0, -1), x_dir=(1, 0, 0))
+            local_identity = self.mapper.create_axis2placement_3d((0, 0, 0), z_dir=(0, 0, 1), x_dir=(1, 0, 0))
+            solid = self.mapper.create_extruded_solid(prof, item.length * s, local_identity)
+
+            shape = self.file.createIfcShapeRepresentation(self.mapper._context3d, "Body", "SweptSolid", [solid])
+            self.mapper.apply_color(shape, RCC_COLOR)
+            prod_def = self.file.createIfcProductDefinitionShape(None, None, [shape])
+            elem = self.file.createIfcPile(
+                create_ifc_guid(), self._owner_history,
+                Name=item.ifc_name,
+                ObjectPlacement=self.file.createIfcLocalPlacement(self.storey.ObjectPlacement, place),
+                Representation=prod_def
+            )
+            self.bind_element_to_storey(elem)
+
+        def _process_pile_cap(item):
+            prof = self.mapper.create_rectangular_profile(item.length * s, item.width * s)
+            scaled_origin = [v * s for v in item.origin]
+            place = self.mapper.create_axis2placement_3d(scaled_origin, z_dir=(0, 0, 1), x_dir=(1, 0, 0))
+            local_identity = self.mapper.create_axis2placement_3d((0, 0, 0), z_dir=(0, 0, 1), x_dir=(1, 0, 0))
+            solid = self.mapper.create_extruded_solid(prof, item.depth * s, local_identity)
+
+            shape = self.file.createIfcShapeRepresentation(self.mapper._context3d, "Body", "SweptSolid", [solid])
+            self.mapper.apply_color(shape, RCC_COLOR)
+            prod_def = self.file.createIfcProductDefinitionShape(None, None, [shape])
+            elem = self.file.createIfcFooting(
+                create_ifc_guid(), self._owner_history,
+                Name=item.ifc_name,
+                ObjectPlacement=self.file.createIfcLocalPlacement(self.storey.ObjectPlacement, place),
+                Representation=prod_def,
+                PredefinedType="PILE_CAP"
+            )
+            self.bind_element_to_storey(elem)
+
+        def _process_pier(item):
+            radius = (item.diameter / 2.0) * s
+            prof = self.file.createIfcCircleProfileDef("AREA", None, self.mapper.create_axis2placement_2d(), float(radius))
+            scaled_origin = [v * s for v in item.origin]
+            place = self.mapper.create_axis2placement_3d(scaled_origin, z_dir=(0, 0, 1), x_dir=(1, 0, 0))
+            local_identity = self.mapper.create_axis2placement_3d((0, 0, 0), z_dir=(0, 0, 1), x_dir=(1, 0, 0))
+            solid = self.mapper.create_extruded_solid(prof, item.height * s, local_identity)
+
+            shape = self.file.createIfcShapeRepresentation(self.mapper._context3d, "Body", "SweptSolid", [solid])
+            self.mapper.apply_color(shape, RCC_COLOR)
+            prod_def = self.file.createIfcProductDefinitionShape(None, None, [shape])
+            elem = self.file.createIfcColumn(
+                create_ifc_guid(), self._owner_history,
+                Name=item.ifc_name,
+                ObjectPlacement=self.file.createIfcLocalPlacement(self.storey.ObjectPlacement, place),
+                Representation=prod_def,
+                PredefinedType="COLUMN"
+            )
+            self.bind_element_to_storey(elem)
+
+        def _process_pier_cap(item):
+            bw, tw, dp, ln = item.bottom_width, item.top_width, item.depth, item.length
+            pts_m = [
+                (-bw / 2.0 * s, 0.0),
+                (bw / 2.0 * s, 0.0),
+                (tw / 2.0 * s, dp * s),
+                (-tw / 2.0 * s, dp * s)
+            ]
+            prof = self.mapper.create_polygonal_profile(pts_m, "PierCapProfile")
+            scaled_origin = [v * s for v in item.origin]
+            place = self.mapper.create_axis2placement_3d(scaled_origin, z_dir=(1, 0, 0), x_dir=(0, 1, 0))
+            local_identity = self.mapper.create_axis2placement_3d((0, 0, 0), z_dir=(0, 0, 1), x_dir=(1, 0, 0))
+            solid = self.mapper.create_extruded_solid(prof, ln * s, local_identity)
+
+            shape = self.file.createIfcShapeRepresentation(self.mapper._context3d, "Body", "SweptSolid", [solid])
+            self.mapper.apply_color(shape, RCC_COLOR)
+            prod_def = self.file.createIfcProductDefinitionShape(None, None, [shape])
+            elem = self.file.createIfcBeam(
+                create_ifc_guid(), self._owner_history,
+                Name=item.ifc_name,
+                ObjectPlacement=self.file.createIfcLocalPlacement(self.storey.ObjectPlacement, place),
+                Representation=prod_def,
+                PredefinedType="BEAM"
+            )
+            self.bind_element_to_storey(elem)
+
+        def _process_rebar(item):
+            import math
+            bar_radius = (item.diameter / 2.0) * s
+            prof = self.file.createIfcCircleProfileDef("AREA", None, self.mapper.create_axis2placement_2d(), float(bar_radius))
+
+            if hasattr(item, 'p1') and hasattr(item, 'p2'):
+                p1, p2 = item.p1, item.p2
+                dx, dy, dz = (p2[0] - p1[0]), (p2[1] - p1[1]), (p2[2] - p1[2])
+                length = math.sqrt(dx*dx + dy*dy + dz*dz)
+                if length > 0:
+                    z_dir = (dx / length, dy / length, dz / length)
+                else:
+                    z_dir = (0, 0, 1)
+
+                if abs(z_dir[2]) > 0.999:
+                    x_dir = (1, 0, 0)
+                else:
+                    mag_x = math.sqrt(z_dir[1]**2 + z_dir[0]**2)
+                    x_dir = (-z_dir[1]/mag_x, z_dir[0]/mag_x, 0)
+
+                scaled_p1 = [v * s for v in p1]
+                place = self.mapper.create_axis2placement_3d(scaled_p1, z_dir=z_dir, x_dir=x_dir)
+                local_identity = self.mapper.create_axis2placement_3d((0, 0, 0), z_dir=(0, 0, 1), x_dir=(1, 0, 0))
+                solid = self.mapper.create_extruded_solid(prof, length * s, local_identity)
+            elif hasattr(item, 'center') and hasattr(item, 'radius'):
+                c = item.center
+                r_m = item.radius * s
+                d_m = item.diameter * s
+
+                outer_pts = []
+                inner_pts = []
+                num_pts = 32
+                for k in range(num_pts):
+                    ang = 2 * math.pi * k / num_pts
+                    outer_pts.append(((r_m + d_m/2) * math.cos(ang), (r_m + d_m/2) * math.sin(ang)))
+                    inner_pts.append(((r_m - d_m/2) * math.cos(ang), (r_m - d_m/2) * math.sin(ang)))
+
+                ring_prof = self.mapper.create_polygonal_profile_with_voids(outer_pts, [inner_pts], "RebarTieRing")
+                scaled_c = [c[0] * s, c[1] * s, (c[2] - item.diameter / 2.0) * s]
+                place = self.mapper.create_axis2placement_3d(scaled_c, z_dir=(0, 0, 1), x_dir=(1, 0, 0))
+                local_identity = self.mapper.create_axis2placement_3d((0, 0, 0), z_dir=(0, 0, 1), x_dir=(1, 0, 0))
+                solid = self.mapper.create_extruded_solid(ring_prof, d_m, local_identity)
+            else:
+                return
+
+            shape = self.file.createIfcShapeRepresentation(self.mapper._context3d, "Body", "SweptSolid", [solid])
+            self.mapper.apply_color(shape, STEEL_COLOR)
+            prod_def = self.file.createIfcProductDefinitionShape(None, None, [shape])
+
+            pred_type = "LIGATURE" if getattr(item, "rebar_type", "") == "LIGATURE" else "MAIN"
+            elem = self.file.createIfcReinforcingBar(
+                create_ifc_guid(), self._owner_history,
+                Name=item.ifc_name,
+                ObjectPlacement=self.file.createIfcLocalPlacement(self.storey.ObjectPlacement, place),
+                Representation=prod_def,
+                PredefinedType=pred_type,
+                BarLength=float(getattr(item, "length", 0.0)) * s if hasattr(item, "length") else None,
+                NominalDiameter=float(item.diameter) * s if hasattr(item, "diameter") else None
+            )
+            self.bind_element_to_storey(elem)
+
+            steel_grade = getattr(item, "steel_grade", "Fe 500D")
+            if steel_grade:
+                val = self.file.createIfcPropertySingleValue("SteelGrade", None, self.file.createIfcLabel(steel_grade), None)
+                pset = self.file.createIfcPropertySet(create_ifc_guid(), self._owner_history, "Pset_ReinforcingBarCommon", None, [val])
+                self.file.createIfcRelDefinesByProperties(create_ifc_guid(), self._owner_history, RelatedObjects=[elem], RelatingPropertyDefinition=pset)
 
         # Iterate over extraction dictionary explicitly
         for key in ["girders", "stiffeners"]:
@@ -618,6 +770,20 @@ class BridgeIfcGenerator:
                      _process_barrier(item)
                  elif item._class_name == "RailingSweep":
                      _process_railing(item)
+
+        # Process substructure components
+        sub_dict = extracted_dict.get("substructure", {})
+        if isinstance(sub_dict, dict):
+            for item in sub_dict.get("piles", []):
+                _process_pile(item)
+            for item in sub_dict.get("pile_caps", []):
+                _process_pile_cap(item)
+            for item in sub_dict.get("piers", []):
+                _process_pier(item)
+            for item in sub_dict.get("pier_caps", []):
+                _process_pier_cap(item)
+            for item in sub_dict.get("rebars", []):
+                _process_rebar(item)
                  
         # Intentionally ignore "deck_textures"
         print("Model assembly complete. Saving...")

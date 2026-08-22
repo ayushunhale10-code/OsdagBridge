@@ -125,8 +125,210 @@ class PlateGirderIFCExtractor:
             "cross_bracings": self._extract_cross_bracings(n_girders, spacing),
             "deck_slab": self._extract_deck_slab(total_width),
             "crash_barriers": self._extract_safety_components(total_width, actual_base_width, actual_railing_width),
-            "supports": self._extract_supports(n_girders, spacing)
+            "supports": self._extract_supports(n_girders, spacing),
+            "substructure": self._extract_substructure(n_girders, spacing),
         }
+
+    def _extract_substructure(self, n_girders, spacing):
+        piles = []
+        pile_caps = []
+        piers = []
+        pier_caps = []
+        rebars = []
+
+        total_structural_width = (n_girders - 1) * spacing
+        d_girder = getattr(self.cad, "girder_section_d", 1200.0)
+        tf_b = getattr(self.cad, "girder_section_tf_b", 25.0)
+        bf_g = getattr(self.cad, "girder_section_bf", 400.0)
+        L_span = self.cad.span_length_L
+
+        # Standard substructure dimensions
+        pier_d = 800.0
+        pier_h = 3000.0
+        pcap_top_w = 3000.0
+        pcap_bot_w = 1200.0
+        pcap_depth = 600.0
+        pcap_length = max(1000.0, total_structural_width + bf_g) if total_structural_width > 0 else 1000.0
+
+        pilecap_len = 2200.0
+        pilecap_w = 1200.0
+        pilecap_depth = 600.0
+
+        pile_d = 400.0
+        pile_len = 5000.0
+        pile_sp = 600.0
+        cover = 40.0
+
+        sub_height = pilecap_depth + pier_h + pcap_depth
+        girder_bottom_z = -(d_girder / 2.0) - tf_b
+        base_z = girder_bottom_z - sub_height
+
+        for x_loc in [0.0, L_span]:
+            # 1. PILE CAP
+            pile_caps.append(ExtractedObject(
+                "PileCap",
+                origin=[x_loc, 0.0, base_z],
+                length=pilecap_len, width=pilecap_w, depth=pilecap_depth,
+                ifc_name=f"Pile Cap at X={x_loc/1000:.1f}m"
+            ))
+
+            # 2. PIER COLUMN
+            piers.append(ExtractedObject(
+                "Pier",
+                origin=[x_loc, 0.0, base_z + pilecap_depth],
+                diameter=pier_d, height=pier_h,
+                ifc_name=f"Pier Column at X={x_loc/1000:.1f}m"
+            ))
+
+            # 3. PIER CAP
+            pier_caps.append(ExtractedObject(
+                "PierCap",
+                origin=[x_loc - pcap_length / 2.0, 0.0, base_z + pilecap_depth + pier_h],
+                top_width=pcap_top_w, bottom_width=pcap_bot_w, depth=pcap_depth, length=pcap_length,
+                ifc_name=f"Pier Cap at X={x_loc/1000:.1f}m"
+            ))
+
+            # 4. PILES (4 per cap)
+            dx = pile_sp / 2.0
+            dy = pile_sp / 2.0
+            pile_count = 0
+            for sx in [-1.0, 1.0]:
+                for sy in [-1.0, 1.0]:
+                    pile_count += 1
+                    px = x_loc + sx * dx
+                    py = sy * dy
+                    piles.append(ExtractedObject(
+                        "Pile",
+                        origin=[px, py, base_z],
+                        diameter=pile_d, length=pile_len,
+                        ifc_name=f"Pile {pile_count} at X={x_loc/1000:.1f}m"
+                    ))
+
+                    # Pile Rebar: 8 main bars + ties
+                    r_cage_pile = (pile_d / 2.0) - cover - 8.0
+                    for b_idx in range(8):
+                        angle = 2 * math.pi * b_idx / 8
+                        bx = px + r_cage_pile * math.cos(angle)
+                        by = py + r_cage_pile * math.sin(angle)
+                        rebars.append(ExtractedObject(
+                            "Rebar",
+                            p1=[bx, by, base_z],
+                            p2=[bx, by, base_z - pile_len],
+                            diameter=16.0, rebar_type="MAIN", steel_grade="Fe 500D",
+                            length=pile_len,
+                            ifc_name=f"Pile {pile_count} Main Bar {b_idx+1}"
+                        ))
+                    n_ties = max(1, int(pile_len // 200.0))
+                    for t_idx in range(n_ties + 1):
+                        tz = base_z - t_idx * 200.0
+                        if tz < base_z - pile_len:
+                            break
+                        rebars.append(ExtractedObject(
+                            "Rebar",
+                            center=[px, py, tz], radius=r_cage_pile, diameter=8.0,
+                            rebar_type="LIGATURE", steel_grade="Fe 500D",
+                            length=2 * math.pi * r_cage_pile,
+                            ifc_name=f"Pile {pile_count} Tie {t_idx+1}"
+                        ))
+
+            # Pier Rebar: 12 main bars + ties
+            r_cage_pier = (pier_d / 2.0) - cover - 8.0
+            pier_z_bot = base_z + pilecap_depth
+            for b_idx in range(12):
+                angle = 2 * math.pi * b_idx / 12
+                bx = x_loc + r_cage_pier * math.cos(angle)
+                by = r_cage_pier * math.sin(angle)
+                rebars.append(ExtractedObject(
+                    "Rebar",
+                    p1=[bx, by, pier_z_bot],
+                    p2=[bx, by, pier_z_bot + pier_h],
+                    diameter=16.0, rebar_type="MAIN", steel_grade="Fe 500D",
+                    length=pier_h,
+                    ifc_name=f"Pier Main Bar {b_idx+1} at X={x_loc/1000:.1f}m"
+                ))
+            n_ties_pier = max(1, int(pier_h // 200.0))
+            for t_idx in range(n_ties_pier + 1):
+                tz = pier_z_bot + t_idx * 200.0
+                if tz > pier_z_bot + pier_h:
+                    break
+                rebars.append(ExtractedObject(
+                    "Rebar",
+                    center=[x_loc, 0.0, tz], radius=r_cage_pier, diameter=8.0,
+                    rebar_type="LIGATURE", steel_grade="Fe 500D",
+                    length=2 * math.pi * r_cage_pier,
+                    ifc_name=f"Pier Tie {t_idx+1} at X={x_loc/1000:.1f}m"
+                ))
+
+            # Pile Cap Rebar mat
+            z_cap_bar = base_z + cover + 8.0
+            n_y = max(1, int((pilecap_w - 2 * cover) // 200.0))
+            y_start = -pilecap_w / 2.0 + cover
+            for i in range(n_y + 1):
+                y_pos = y_start + i * 200.0
+                if y_pos > pilecap_w / 2.0 - cover:
+                    break
+                rebars.append(ExtractedObject(
+                    "Rebar",
+                    p1=[x_loc - pilecap_len / 2.0 + cover, y_pos, z_cap_bar],
+                    p2=[x_loc + pilecap_len / 2.0 - cover, y_pos, z_cap_bar],
+                    diameter=16.0, rebar_type="MAIN", steel_grade="Fe 500D",
+                    length=pilecap_len - 2 * cover,
+                    ifc_name=f"Pile Cap Bar X {i+1} at X={x_loc/1000:.1f}m"
+                ))
+            n_x = max(1, int((pilecap_len - 2 * cover) // 200.0))
+            x_start_pc = x_loc - pilecap_len / 2.0 + cover
+            for i in range(n_x + 1):
+                x_pos = x_start_pc + i * 200.0
+                if x_pos > x_loc + pilecap_len / 2.0 - cover:
+                    break
+                rebars.append(ExtractedObject(
+                    "Rebar",
+                    p1=[x_pos, -pilecap_w / 2.0 + cover, z_cap_bar],
+                    p2=[x_pos, pilecap_w / 2.0 - cover, z_cap_bar],
+                    diameter=16.0, rebar_type="MAIN", steel_grade="Fe 500D",
+                    length=pilecap_w - 2 * cover,
+                    ifc_name=f"Pile Cap Bar Y {i+1} at X={x_loc/1000:.1f}m"
+                ))
+
+            # Pier Cap Rebar mat
+            z_pcap_bar = pier_z_bot + pier_h + cover + 8.0
+            n_y_pcap = max(1, int((pcap_bot_w - 2 * cover) // 200.0))
+            y_start_pc = -pcap_bot_w / 2.0 + cover
+            for i in range(n_y_pcap + 1):
+                y_pos = y_start_pc + i * 200.0
+                if y_pos > pcap_bot_w / 2.0 - cover:
+                    break
+                rebars.append(ExtractedObject(
+                    "Rebar",
+                    p1=[x_loc - pcap_length / 2.0 + cover, y_pos, z_pcap_bar],
+                    p2=[x_loc + pcap_length / 2.0 - cover, y_pos, z_pcap_bar],
+                    diameter=16.0, rebar_type="MAIN", steel_grade="Fe 500D",
+                    length=pcap_length - 2 * cover,
+                    ifc_name=f"Pier Cap Bar X {i+1} at X={x_loc/1000:.1f}m"
+                ))
+            n_x_pcap = max(1, int((pcap_length - 2 * cover) // 200.0))
+            x_start_pcap = x_loc - pcap_length / 2.0 + cover
+            for i in range(n_x_pcap + 1):
+                x_pos = x_start_pcap + i * 200.0
+                if x_pos > x_loc + pcap_length / 2.0 - cover:
+                    break
+                rebars.append(ExtractedObject(
+                    "Rebar",
+                    p1=[x_pos, -pcap_bot_w / 2.0 + cover, z_pcap_bar],
+                    p2=[x_pos, pcap_bot_w / 2.0 - cover, z_pcap_bar],
+                    diameter=16.0, rebar_type="MAIN", steel_grade="Fe 500D",
+                    length=pcap_bot_w - 2 * cover,
+                    ifc_name=f"Pier Cap Bar Y {i+1} at X={x_loc/1000:.1f}m"
+                ))
+
+        return {
+            "piles": piles,
+            "pile_caps": pile_caps,
+            "piers": piers,
+            "pier_caps": pier_caps,
+            "rebars": rebars,
+        }
+
 
     def _solve_girder_layout(self, total_width):
         """
