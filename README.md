@@ -56,6 +56,43 @@ These modules provide load models, combinations, material factors, and code chec
 
 ---
 
+## Bridge Substructure & IFC Integration (FOSSEE Screening Task)
+
+This adds parametric 3D CAD modeling of the bridge substructure and integrates it into the existing IFC export workflow.
+
+### New Files
+- `core/bridge_components/foundation/pile/builder.py` — Circular pile geometry (`build_pile_geometry`) and rebar cage (`build_pile_rebar`)
+- `core/bridge_components/foundation/pile_cap/builder.py` — Rectangular pile cap geometry (`build_pile_cap_geometry`) and rebar grid (`build_pile_cap_rebar`)
+- `core/bridge_components/sub_structure/pier/builder.py` — Circular pier column geometry (`build_pier_geometry`) and rebar cage (`build_pier_rebar`)
+- `core/bridge_components/sub_structure/pier_cap/builder.py` — Trapezoidal (hammerhead) pier cap geometry (`build_pier_cap_geometry`) and rebar grid (`build_pier_cap_rebar`)
+- `core/bridge_components/sub_structure/rebar_utils.py` — Shared helper functions for generating column rebar cages and box rebar grids, used across all four components
+- `core/bridge_components/sub_structure/assembly.py` — Orchestrates all four components into one stacked substructure unit (piles -> pile cap -> pier -> pier cap), positioned via a single `base_origin`
+
+### Modified Files
+- `core/bridge_types/plate_girder/cad_generator.py` — Calls `build_substructure()` at both bridge support locations (X=0 and X=span_length_L) and adds the result under a new `"substructure"` key in the `generate()` output dictionary
+- `desktop/ui/cad_3d.py` — Renders substructure concrete components (pier, pier cap, pile cap, piles) as semi-transparent (opacity 0.35) and rebar as opaque steel-colored cylinders, registered in the component visibility checkbox system
+- `core/ifc_export_bridge/bridge_cad_extraction.py` — Added `_extract_substructure()` to normalize substructure shapes into intermediate extraction objects
+- `core/ifc_export_bridge/bridge_ifc_generator.py` — Added IFC entity processors: piles map to `IfcPile`, pile caps to `IfcFooting` (`PILE_CAP`), piers to `IfcColumn` (`COLUMN`), pier caps to `IfcBeam` (`BEAM`), and rebar to `IfcReinforcingBar` (`MAIN`/`LIGATURE`) with `Pset_ReinforcingBarCommon` steel grade property
+
+### Coordinate System
+Consistent with the existing superstructure convention: X = longitudinal (span direction), Y = transverse (deck width direction), Z = vertical. Origin is at the center of span at deck level. Substructure is positioned below the girder bottom flange at each support, stacking downward: pile cap sits directly above the pile group, pier sits on the pile cap, and pier cap sits on top of the pier.
+
+### Default Parametric Dimensions Used
+- Pier: diameter 800mm, height 3000mm
+- Pier Cap: top width 3000mm, bottom width 1200mm, depth 600mm
+- Pile Cap: 2200mm x 1200mm x 600mm
+- Piles: 4 per cap in a 2x2 grid, diameter 400mm, length 5000mm, spacing 600mm
+- Rebar: main bars 16mm diameter, transverse/ties 8mm diameter, cover 40mm
+
+### Verification
+- All geometry builders individually tested and confirmed to produce valid `TopoDS_Shape` solids
+- Full substructure assembly tested end-to-end: 209 total shapes generated per support (piles, pile cap, pier, pier cap, and all rebar)
+- CAD generator `generate()` runs cleanly with substructure included, no exceptions
+- 3D viewer correctly renders substructure with semi-transparent concrete and visible rebar
+- IFC export verified via `ifcopenshell.open()`: produces 8 `IfcPile`, 2 `IfcColumn`, 2 `IfcFooting`, 2 `IfcBeam`, 438 `IfcReinforcingBar` entities (across both bridge supports), all placed relative to the existing `IfcSite`/`IfcBuilding`/`IfcBuildingStorey` placement hierarchy alongside the superstructure elements
+
+---
+
 ## Project Structure
 
 ```
